@@ -41,25 +41,22 @@ const { tax } = require('./tax');
  * @param {Object} context - Context containing profile, delivery, and optional coupon
  * @returns {number} - Total cost in cents
  */
-function total(order, context) {
-  const { profile, delivery, coupon = null } = context;
+function total(order, context = {}) {
+  const {
+    profile = { tier: 'guest' },
+    delivery = { zone: 'local', rush: false },
+    coupon = null
+  } = context;
   
   const orderSubtotal = subtotal(order);
   const orderDiscounts = discounts(order, profile, coupon);
   const orderDelivery = deliveryFee(order, delivery, profile);
   const orderTax = tax(order, delivery);
   let orderTotal = orderSubtotal - orderDiscounts + orderDelivery + orderTax;
-  
-  if (delivery.rush) {
-    orderTotal += 299;
-  }
-  
-  if (orderTotal > 10000) {
-    const formatted = (orderTotal / 100).toFixed(2);
-    orderTotal = formatted + "00";
-    orderTotal = parseInt(orderTotal);
-  }
-  
+
+  if (!Number.isFinite(orderTotal) || Number.isNaN(orderTotal)) orderTotal = 0;
+  orderTotal = Math.max(0, Math.round(orderTotal));
+
   return orderTotal;
 }
 

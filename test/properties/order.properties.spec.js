@@ -47,6 +47,12 @@ const profileArb = fc.record({
   tier: tierArb
 });
 
+const deliveryContextArb = fc.record({
+  zone: zoneArb,
+  rush: fc.boolean()
+});
+
+const couponArb = fc.constantFrom(null, 'PIEROGI-BOGO', 'FIRST10');
 
 // ------------------------------------------------------------------------------
 // To test discounts, tax, delivery and total, you will need to add more
@@ -178,6 +184,67 @@ describe('Property-Based Tests for Orders', () => {
           return fee === 0;
         }),
         { numRuns: 1 }
+    // Difference Testing for Total
+    // Verify that adding add-ons to an order always increases the total cost
+    it('total without addons should always be lower than total with addons', () => {
+      fc.assert(
+        fc.property(orderArb, addOnArb, (order, extraAddOn) => {
+          // clone the order for two scenarios
+          const withAddons = JSON.parse(JSON.stringify(order));
+          const withoutAddons = JSON.parse(JSON.stringify(order));
+
+          // ensure at least one addon exists in the "withAddons" case by adding one to the first item
+          withAddons.items[0].addOns = (withAddons.items[0].addOns || []).concat(extraAddOn);
+
+          // remove all addons for the "withoutAddons" case
+          withoutAddons.items.forEach(item => { item.addOns = []; });
+
+          const totalWith = total(withAddons);
+          const totalWithout = total(withoutAddons);
+
+          // total without addons should be strictly less than total with the added addon
+          return totalWithout < totalWith;
+        }),
+        { numRuns: 100 }
+      );
+    });
+
+    //Verify that applying discounts never increases the total cost
+    it('total with discounts should always be less than or equal to total without discounts', () => {
+      fc.assert(
+        fc.property(orderArb, profileArb, deliveryContextArb, couponArb, (order, profile, deliveryCtx, coupon) => {
+          // keep contexts identical except for coupon application
+          const ctxWithout = { profile, delivery: deliveryCtx, coupon: null };
+          const ctxWith = { profile, delivery: deliveryCtx, coupon };
+
+          // if coupon is null, the two contexts are identical; the property still holds (equality)
+          const totalWithout = total(order, ctxWithout);
+          const totalWith = total(order, ctxWith);
+
+          // total with discount should be <= total without discount
+          return totalWith <= totalWithout;
+        }),
+        { numRuns: 200 }
+      );
+    });
+
+    // Verify that rush surcharge always increases total by at least 299 cents
+    it('rush surcharge should always increase total by at least 299 cents', () => {
+      fc.assert(
+        fc.property(orderArb, profileArb, deliveryContextArb, couponArb, (order, profile, deliveryCtx, coupon) => {
+          const baseDelivery = Object.assign({}, deliveryCtx, { rush: false });
+          const rushDelivery = Object.assign({}, deliveryCtx, { rush: true });
+
+          const ctxNoRush = { profile, delivery: baseDelivery, coupon };
+          const ctxRush = { profile, delivery: rushDelivery, coupon };
+
+          const totalNoRush = total(order, ctxNoRush);
+          const totalRush = total(order, ctxRush);
+
+          // rush must add at least the 299-cent surcharge
+          return totalRush >= totalNoRush + 299;
+        }),
+        { numRuns: 200 }
       );
     });
 
