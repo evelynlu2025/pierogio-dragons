@@ -4,7 +4,7 @@ const { subtotal } = require('../../src/subtotal');
 const { discounts } = require('../../src/discounts');
 const { total } = require('../../src/total');
 const { tax } = require('../../src/tax');
-const { delivery } = require('../../src/delivery');
+const { deliveryFee } = require('../../src/delivery');
 
 // These arbitrary generators provide primitive building blocks for constructing orders and contexts in property-based tests
 //
@@ -36,6 +36,11 @@ const orderItemArb = fc.record({
 const orderArb = fc.record({
   // we specify the maximum and minimum length of the items array here
   items: fc.array(orderItemArb, { minLength: 1, maxLength: 5 })
+});
+
+const deliveryArb = fc.record({
+  zone: zoneArb,
+  rush: fc.boolean()
 });
 
 const profileArb = fc.record({
@@ -92,6 +97,93 @@ describe('Property-Based Tests for Orders', () => {
     //   );
     // });
 
+    // Delivery fee should always be non-negative integer
+    it('delivery fee should always be non-negative integer', () => {
+      fc.assert(
+        fc.property(orderArb, deliveryArb, profileArb, (order, delivery, profile) => {
+          const result = deliveryFee(order, delivery, profile);
+          return result >= 0 && Number.isInteger(result);
+        }),
+        { numRuns: 50 }
+      );
+    });
+
+    // Rush delivery should never reduce the fee compared to non-rush
+    it('rush delivery should never reduce the fee compared to non-rush', () => {
+      fc.assert(
+        fc.property(orderArb, deliveryArb, profileArb, (order, delivery, profile) => {
+          const feeWithoutRush = deliveryFee(order, { ...delivery, rush: false }, profile);
+          const feeWithRush = deliveryFee(order, { ...delivery, rush: true }, profile);
+          return feeWithRush >= feeWithoutRush;
+        }),
+        { numRuns: 50 }
+      );
+    });
+
+    // Outer zone should never cost less than local zone
+    it('outer zone should never cost less than local zone', () => {
+      fc.assert(
+        fc.property(orderArb, profileArb, (order, profile) => {
+          const localFee = deliveryFee(order, { zone: 'local', rush: false }, profile);
+          const outerFee = deliveryFee(order, { zone: 'outer', rush: false }, profile);
+          return outerFee >= localFee;
+        }),
+        { numRuns: 50 }
+      );
+    });
+
+    // Delivery fee should be constant regardless of item count (for orders below free delivery threshold)
+    it('delivery fee should be constant regardless of item count', () => {
+      fc.assert(
+        fc.property(orderItemArb, deliveryArb, profileArb, (item, delivery, profile) => {
+          const lowPriceItem = { ...item, unitPriceCents: 200, qty: 6 };
+          const order1 = { items: [lowPriceItem] };
+          const order2 = { items: [lowPriceItem, lowPriceItem] };
+          
+          const fee1 = deliveryFee(order1, delivery, profile);
+          const fee2 = deliveryFee(order2, delivery, profile);
+          
+          return fee1 === fee2;
+        }),
+        { numRuns: 50 }
+      );
+    });
+
+    // Empty orders should not charge delivery fees
+    it('empty orders should not charge delivery fees', () => {
+      fc.assert(
+        fc.property(deliveryArb, profileArb, (delivery, profile) => {
+          const emptyOrder = { items: [] };
+          const fee = deliveryFee(emptyOrder, delivery, profile);
+          return fee === 0;
+        }),
+        { numRuns: 50 }
+      );
+    });
+
+    // When discounted subtotal equals VIP threshold, delivery should be free
+    it('vip threshold equality should be free', () => {
+      fc.assert(
+        fc.property(fc.constant(true), () => {
+          const order = { items: [{ kind: 'hot', sku: 'P6-POTATO', title: 'Test', filling: 'potato', qty: 6, unitPriceCents: 500, addOns: [] }] };
+          const profile = { tier: 'vip' };
+          const fee = deliveryFee(order, { zone: 'local', rush: false }, profile);
+          return fee === 0;
+        }),
+        { numRuns: 1 }
+      );
+    });
+
+    // Tier casing should not change threshold for regular
+    it('regular tier should be case-insensitive for threshold', () => {
+      fc.assert(
+        fc.property(fc.constant(true), () => {
+          const order = { items: [{ kind: 'hot', sku: 'P6-POTATO', title: 'Test', filling: 'potato', qty: 6, unitPriceCents: 750, addOns: [] }] };
+          const profile = { tier: 'REGULAR' };
+          const fee = deliveryFee(order, { zone: 'local', rush: false }, profile);
+          return fee === 0;
+        }),
+        { numRuns: 1 }
     // Difference Testing for Total
     // Verify that adding add-ons to an order always increases the total cost
     it('total without addons should always be lower than total with addons', () => {
