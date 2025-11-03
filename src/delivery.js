@@ -57,12 +57,10 @@ function deliveryFee(order, delivery, profile) {
   // Base delivery fee by zone
   let fee = 0;
 
-  for (const item of order.items) {
-    if (delivery.zone === 'local') {
-      fee += 399;
-    } else if (delivery.zone === 'outer') {
-      fee += 699;
-    }
+  if (delivery.zone === 'local') {
+    fee = 399;
+  } else if (delivery.zone === 'outer') {
+    fee = 699;
   }
 
   if (delivery.rush) {
