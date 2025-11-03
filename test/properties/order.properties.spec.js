@@ -155,5 +155,31 @@ describe('Property-Based Tests for Orders', () => {
       );
     });
 
+    // When discounted subtotal equals VIP threshold, delivery should be free
+    it('vip threshold equality should be free', () => {
+      fc.assert(
+        fc.property(fc.constant(true), () => {
+          const order = { items: [{ kind: 'hot', sku: 'P6-POTATO', title: 'Test', filling: 'potato', qty: 6, unitPriceCents: 500, addOns: [] }] };
+          const profile = { tier: 'vip' };
+          const fee = deliveryFee(order, { zone: 'local', rush: false }, profile);
+          return fee === 0;
+        }),
+        { numRuns: 1 }
+      );
+    });
+
+    // Tier casing should not change threshold for regular
+    it('regular tier should be case-insensitive for threshold', () => {
+      fc.assert(
+        fc.property(fc.constant(true), () => {
+          const order = { items: [{ kind: 'hot', sku: 'P6-POTATO', title: 'Test', filling: 'potato', qty: 6, unitPriceCents: 750, addOns: [] }] };
+          const profile = { tier: 'REGULAR' };
+          const fee = deliveryFee(order, { zone: 'local', rush: false }, profile);
+          return fee === 0;
+        }),
+        { numRuns: 1 }
+      );
+    });
+
   });
 });
