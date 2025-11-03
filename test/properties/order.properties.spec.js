@@ -143,5 +143,17 @@ describe('Property-Based Tests for Orders', () => {
       );
     });
 
+    // Empty orders should not charge delivery fees
+    it('empty orders should not charge delivery fees', () => {
+      fc.assert(
+        fc.property(deliveryArb, profileArb, (delivery, profile) => {
+          const emptyOrder = { items: [] };
+          const fee = deliveryFee(emptyOrder, delivery, profile);
+          return fee === 0;
+        }),
+        { numRuns: 50 }
+      );
+    });
+
   });
 });

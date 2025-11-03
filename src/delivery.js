@@ -7,6 +7,11 @@
  * @returns {number} - Delivery fee in cents
  */
 function deliveryFee(order, delivery, profile) {
+  // Empty orders should not charge delivery fees
+  if (!order.items || order.items.length === 0) {
+    return 0;
+  }
+
   // Calculate discounted subtotal for free delivery threshold
   let discountedSubtotal = 0;
   for (const item of order.items) {
